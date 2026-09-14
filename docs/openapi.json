@@ -1,0 +1,259 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Court Hub API",
+    "version": "v1",
+    "description": "Multi-tenant court-facility API. Authenticate with a Sanctum bearer token."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000/api/v1",
+      "description": "Local development"
+    }
+  ],
+  "paths": {
+    "/bookings/{booking}/reschedule": {
+      "patch": {
+        "summary": "Reschedule an upcoming booking on the same court at the same price",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "booking",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "starts_at",
+                  "ends_at"
+                ],
+                "properties": {
+                  "starts_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "ends_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated booking; amount and expiry unchanged"
+          },
+          "403": {
+            "description": "Not owner or authorized staff"
+          },
+          "404": {
+            "description": "Booking outside tenant or missing"
+          },
+          "409": {
+            "description": "Court conflict or maintenance"
+          },
+          "422": {
+            "description": "Invalid time, inactive booking/court, closure, or price change"
+          }
+        }
+      }
+    },
+    "/booking-facilities": {
+      "get": {
+        "summary": "Discover facilities within the signed-in user's tenant",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated facility collection"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Service healthy"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Create a bearer token",
+        "responses": {
+          "200": {
+            "description": "Authenticated"
+          }
+        }
+      }
+    },
+    "/bookings": {
+      "get": {
+        "summary": "List bookings",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bookings"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create reservation",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Reserved"
+          }
+        }
+      }
+    },
+    "/payments/intents": {
+      "post": {
+        "summary": "Create or reuse a PayMongo booking checkout (owner only; server-derived amount)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Pending payment"
+          }
+        }
+      }
+    },
+    "/payments/webhooks/{provider}": {
+      "post": {
+        "summary": "Provider payment webhook",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "paymongo",
+                "xendit"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook processed"
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "summary": "List in-app notifications",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notifications"
+          }
+        }
+      }
+    },
+    "/reports/revenue": {
+      "get": {
+        "summary": "Revenue report",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Report"
+          }
+        }
+      }
+    },
+    "/bookings/{booking}/payment-status": {
+      "get": {
+        "summary": "Verify PayMongo checkout status for your booking",
+        "parameters": [
+          {
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "name": "booking"
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Not booking owner"
+          },
+          "200": {
+            "description": "Payment, checkout URL, and booking status"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Sanctum"
+      }
+    }
+  }
+}
