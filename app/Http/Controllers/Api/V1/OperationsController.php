@@ -59,7 +59,13 @@ class OperationsController extends Controller
 
     public function createCoach(Request $request)
     {
-        $coach = CoachProfile::create($request->validate(['name' => ['required', 'string', 'max:120'], 'email' => ['nullable', 'email'], 'phone' => ['nullable', 'string', 'max:40'], 'bio' => ['nullable', 'string', 'max:2000'], 'hourly_rate' => ['required', 'numeric', 'min:0']]) + ['tenant_id' => $request->user()->tenant_id]);
+        $data = $request->validate(['user_id' => ['nullable', 'integer'], 'name' => ['required', 'string', 'max:120'], 'email' => ['nullable', 'email'], 'phone' => ['nullable', 'string', 'max:40'], 'bio' => ['nullable', 'string', 'max:2000'], 'hourly_rate' => ['required', 'numeric', 'min:0']]);
+        if (isset($data['user_id'])) {
+            $user = $this->user($request, $data['user_id']);
+            abort_unless($user->hasRole('coach'), 422, 'The selected account must have the coach role.');
+            abort_if(CoachProfile::where('tenant_id', $request->user()->tenant_id)->where('user_id', $user->id)->exists(), 422, 'This coach already has a profile.');
+        }
+        $coach = CoachProfile::create($data + ['tenant_id' => $request->user()->tenant_id]);
 
         return response()->json(['data' => $coach], 201);
     }
@@ -80,7 +86,19 @@ class OperationsController extends Controller
 
     public function rentals(Request $request)
     {
-        return Rental::where('tenant_id', $request->user()->tenant_id)->paginate();
+        return Rental::visibleTo($request->user())
+            ->with(['user:id,name,email', 'inventoryItem:id,name'])
+            ->latest('rented_at')
+            ->paginate();
+    }
+
+    public function rentalUsers(Request $request)
+    {
+        return response()->json(['data' => User::query()
+            ->where('tenant_id', $request->user()->tenant_id)
+            ->role('player')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email'])]);
     }
 
     public function createRental(Request $request)

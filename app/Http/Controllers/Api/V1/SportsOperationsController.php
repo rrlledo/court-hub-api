@@ -16,6 +16,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class SportsOperationsController extends Controller
 {
@@ -166,7 +167,9 @@ class SportsOperationsController extends Controller
 
     public function registrations(Request $request, int $tournament)
     {
-        return TournamentRegistration::where('tournament_id', $this->tournament($request, $tournament)->id)->paginate();
+        return TournamentRegistration::where('tournament_id', $this->tournament($request, $tournament)->id)
+            ->with('user:id,name,email')
+            ->paginate();
     }
 
     public function cancelRegistration(Request $request, int $tournament, int $registration)
@@ -220,7 +223,10 @@ class SportsOperationsController extends Controller
 
     private function rental(Request $r, int $id): Rental
     {
-        return Rental::where('tenant_id', $r->user()->tenant_id)->findOrFail($id);
+        $rental = Rental::where('tenant_id', $r->user()->tenant_id)->findOrFail($id);
+        Gate::forUser($r->user())->authorize('view', $rental);
+
+        return $rental;
     }
 
     private function tournament(Request $r, int $id): Tournament

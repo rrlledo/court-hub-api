@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\VerifyPlayerEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -24,11 +25,14 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->belongsTo(Tenant::class);
     }
 
-    public function homeFacility() { return $this->belongsTo(Facility::class, 'home_facility_id'); }
+    public function homeFacility()
+    {
+        return $this->belongsTo(Facility::class, 'home_facility_id');
+    }
 
     public function sendEmailVerificationNotification()
     {
-        $this->notify((new \App\Notifications\VerifyPlayerEmail)->afterCommit());
+        $this->notify((new VerifyPlayerEmail)->afterCommit());
     }
 
     public function activityLogs()

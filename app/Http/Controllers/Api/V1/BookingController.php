@@ -20,7 +20,9 @@ class BookingController extends Controller
     public function index(Request $request)
     {
         $query = Booking::where('tenant_id', $request->user()->tenant_id)->latest('starts_at');
-        if ($request->user()->hasRole('player') && $request->user()->getRoleNames()->count() === 1) $query->where('user_id', $request->user()->id);
+        if ($request->user()->hasRole('player') && $request->user()->getRoleNames()->count() === 1) {
+            $query->where('user_id', $request->user()->id);
+        }
         if ($request->filled('court_id')) {
             $query->where('court_id', $request->integer('court_id'));
         }

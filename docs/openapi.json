@@ -203,6 +203,60 @@
         }
       }
     },
+    "/push/devices": {
+      "post": {
+        "summary": "Register the current mobile device for Firebase push notifications",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "platform"],
+                "properties": {
+                  "token": {"type": "string"},
+                  "platform": {"type": "string", "enum": ["android", "ios"]},
+                  "device_name": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Device registered"}
+        }
+      },
+      "delete": {
+        "summary": "Remove the current mobile device registration",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {"description": "Device removed"}
+        }
+      }
+    },
     "/reports/revenue": {
       "get": {
         "summary": "Revenue report",
@@ -245,6 +299,69 @@
           }
         ]
       }
+    },
+    "/super-admin/overview": {
+      "get": {
+        "summary": "Review platform-wide tenant, facility, revenue, and simulated subscription totals",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Super Admin overview"}, "403": {"description": "Super Admin role required"}}
+      }
+    },
+    "/super-admin/tenants": {
+      "get": {
+        "summary": "List tenants with simulated subscription state",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "Paginated tenant list"}, "403": {"description": "Super Admin role required"}}
+      }
+    },
+    "/super-admin/tenants/{tenant}": {
+      "get": {
+        "summary": "Inspect a tenant and its platform metrics",
+        "security": [{"bearerAuth": []}],
+        "parameters": [{"name": "tenant", "in": "path", "required": true, "schema": {"type": "integer"}}],
+        "responses": {"200": {"description": "Tenant detail"}, "403": {"description": "Super Admin role required"}, "404": {"description": "Tenant missing"}}
+      },
+      "patch": {
+        "summary": "Update tenant access, settings, or simulated subscription state",
+        "security": [{"bearerAuth": []}],
+        "parameters": [{"name": "tenant", "in": "path", "required": true, "schema": {"type": "integer"}}],
+        "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"is_active": {"type": "boolean"}, "subscription_plan": {"type": "string", "enum": ["starter", "growth", "enterprise"]}, "subscription_status": {"type": "string", "enum": ["trial", "active", "past_due", "cancelled"]}, "subscription_amount": {"type": "number", "minimum": 0}, "subscription_renews_at": {"type": "string", "format": "date", "nullable": true}}}}}},
+        "responses": {"200": {"description": "Updated tenant"}, "403": {"description": "Super Admin role required"}, "422": {"description": "Invalid tenant or subscription fields"}}
+      }
+    },
+    "/super-admin/tenants/{tenant}/users/{user}/revoke-sessions": {
+      "post": {
+        "summary": "Revoke every active session for a tenant user",
+        "security": [{"bearerAuth": []}],
+        "parameters": [{"name": "tenant", "in": "path", "required": true, "schema": {"type": "integer"}}, {"name": "user", "in": "path", "required": true, "schema": {"type": "integer"}}],
+        "responses": {"200": {"description": "Sessions revoked"}, "403": {"description": "Super Admin role required"}, "404": {"description": "Tenant user missing"}}
+      }
+    },
+    "/auth/social/{provider}": {
+      "post": {
+        "summary": "Sign in with a non-production social identity",
+        "parameters": [{"name": "provider", "in": "path", "required": true, "schema": {"type": "string", "enum": ["google", "apple", "facebook"]}}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["mock_subject", "email"], "properties": {"mock_subject": {"type": "string"}, "email": {"type": "string", "format": "email"}, "facility_id": {"type": "integer"}}}}}},
+        "responses": {"200": {"description": "Existing mock social account signed in"}, "201": {"description": "Mock player account created"}, "422": {"description": "Invalid mock provider data"}}
+      }
+    },
+    "/payments/settlements": {
+      "get": {"summary": "Read the simulated provider settlement feed", "security": [{"bearerAuth": []}], "responses": {"200": {"description": "Payment totals grouped by provider"}}}
+    },
+    "/coaches/{coach}/students": {
+      "get": {"summary": "List a coach's students and revenue shares", "security": [{"bearerAuth": []}], "parameters": [{"name": "coach", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Coach roster"}}},
+      "post": {"summary": "Assign a student and simulated revenue share", "security": [{"bearerAuth": []}], "parameters": [{"name": "coach", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"201": {"description": "Student assigned"}}}
+    },
+    "/tournaments/{tournament}/teams": {
+      "get": {"summary": "List tournament teams", "security": [{"bearerAuth": []}], "responses": {"200": {"description": "Team list"}}},
+      "post": {"summary": "Create a tournament team", "security": [{"bearerAuth": []}], "responses": {"201": {"description": "Team created"}}}
+    },
+    "/tournaments/{tournament}/registrations/{registration}/check-in": {
+      "post": {"summary": "Check in a tournament participant", "security": [{"bearerAuth": []}], "responses": {"200": {"description": "Participant checked in"}}}
+    },
+    "/super-admin/tenants/{tenant}/subscription-invoices": {
+      "get": {"summary": "List simulated platform invoices", "security": [{"bearerAuth": []}], "responses": {"200": {"description": "Invoice history"}}},
+      "post": {"summary": "Create a simulated platform invoice", "security": [{"bearerAuth": []}], "responses": {"201": {"description": "Invoice created"}}}
     }
   },
   "components": {

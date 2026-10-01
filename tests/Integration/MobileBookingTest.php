@@ -2,7 +2,13 @@
 
 namespace Tests\Integration;
 
-use App\Models\{Tenant, Organization, Facility, Branch, Court, User};
+use App\Models\Branch;
+use App\Models\Court;
+use App\Models\CourtMaintenance;
+use App\Models\Facility;
+use App\Models\Organization;
+use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -36,7 +42,7 @@ class MobileBookingTest extends TestCase
         $this->patchJson('/api/v1/bookings/'.$bookingId.'/reschedule', array_merge($move, ['ends_at' => now()->addDay()->setTime(14, 0)->toIso8601String()]))->assertUnprocessable();
         $this->postJson('/api/v1/bookings', $payload)->assertCreated();
         $this->patchJson('/api/v1/bookings/'.$bookingId.'/reschedule', $payload)->assertConflict();
-        \App\Models\CourtMaintenance::create(['tenant_id' => $tenant->id, 'court_id' => $court->id, 'starts_at' => now()->addDay()->setTime(14, 0), 'ends_at' => now()->addDay()->setTime(16, 0), 'status' => 'scheduled', 'reason' => 'Repairs']);
+        CourtMaintenance::create(['tenant_id' => $tenant->id, 'court_id' => $court->id, 'starts_at' => now()->addDay()->setTime(14, 0), 'ends_at' => now()->addDay()->setTime(16, 0), 'status' => 'scheduled', 'reason' => 'Repairs']);
         $this->patchJson('/api/v1/bookings/'.$bookingId.'/reschedule', ['starts_at' => now()->addDay()->setTime(14, 0)->toIso8601String(), 'ends_at' => now()->addDay()->setTime(15, 0)->toIso8601String()])->assertConflict();
         $this->postJson('/api/v1/bookings/'.$bookingId.'/cancel')->assertOk()->assertJsonPath('data.status', 'cancelled');
         $this->postJson('/api/v1/bookings/'.$bookingId.'/cancel')->assertUnprocessable();
@@ -48,4 +54,3 @@ class MobileBookingTest extends TestCase
         $this->patchJson('/api/v1/bookings/'.$bookingId.'/reschedule', $move)->assertNotFound();
     }
 }
-

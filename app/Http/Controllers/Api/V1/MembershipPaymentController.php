@@ -10,17 +10,18 @@ use App\Models\MembershipPlan;
 use App\Models\MembershipSessionUsage;
 use App\Models\Payment;
 use App\Models\PaymentRefund;
+use App\Services\MockXenditGateway;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class MembershipPaymentController extends Controller
 {
-    public function providers()
+    public function providers(MockXenditGateway $xendit)
     {
         return response()->json(['data' => [
             ['name' => 'paymongo', 'methods' => ['gcash', 'maya', 'card'], 'configured' => filled(config('services.paymongo.secret_key')) && filled(config('services.paymongo.webhook_secret')) && filled(config('services.paymongo.return_url'))],
-            ['name' => 'xendit', 'methods' => [], 'configured' => false],
+            ['name' => 'xendit', 'methods' => ['gcash', 'maya', 'card'], 'configured' => $xendit->enabled(), 'mock' => $xendit->enabled()],
         ]]);
     }
 
@@ -109,14 +110,19 @@ class MembershipPaymentController extends Controller
         return MembershipSessionUsage::where('membership_id', $model->id)->latest('used_at')->paginate();
     }
 
-    public function refund(Request $request, int $payment)
+    public function refund(Request $request, int $payment, MockXenditGateway $xendit)
     {
         $model = $this->payment($request, $payment);
         $data = $request->validate(['amount' => ['required', 'numeric', 'min:0.01', 'max:'.$model->amount], 'reason' => ['nullable', 'string', 'max:1000']]);
         $alreadyRefunded = (float) PaymentRefund::where('payment_id', $model->id)->whereIn('status', ['requested', 'approved', 'completed'])->sum('amount');
         abort_if($alreadyRefunded + (float) $data['amount'] > (float) $model->amount, 422, 'The refund total cannot exceed the payment amount.');
 
-        return response()->json(['data' => PaymentRefund::create($data + ['tenant_id' => $request->user()->tenant_id, 'payment_id' => $model->id, 'requested_by' => $request->user()->id])], 201);
+        $refund = PaymentRefund::create($data + ['tenant_id' => $request->user()->tenant_id, 'payment_id' => $model->id, 'requested_by' => $request->user()->id]);
+        if ($model->provider === 'xendit' && $xendit->enabled()) {
+            $refund = $xendit->refund($model, $refund);
+        }
+
+        return response()->json(['data' => $refund], 201);
     }
 
     public function invoice(Request $request, int $payment)

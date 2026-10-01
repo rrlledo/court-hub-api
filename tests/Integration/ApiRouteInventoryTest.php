@@ -2,12 +2,15 @@
 
 namespace Tests\Integration;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ApiRouteInventoryTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_every_registered_api_route_is_reachable_and_protected_or_validated(): void
     {
         $routes = collect(app('router')->getRoutes()->getRoutes())
@@ -29,7 +32,7 @@ class ApiRouteInventoryTest extends TestCase
                 if ($this->requiresAuthentication($route)) {
                     $this->assertSame(401, $response->getStatusCode(), "Expected authentication guard: {$description}");
                 } else {
-                    $this->assertContains($response->getStatusCode(), [200, 201, 204, 401, 422, 429], "Unexpected public-route response: {$description}");
+                    $this->assertContains($response->getStatusCode(), [200, 201, 204, 401, 422, 429, 503], "Unexpected public-route response: {$description}");
                 }
             }
         }

@@ -2,7 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\{Court, BranchHoliday, OperatingHour, CourtMaintenance, PricingRule};
+use App\Models\BranchHoliday;
+use App\Models\Court;
+use App\Models\CourtMaintenance;
+use App\Models\OperatingHour;
+use App\Models\PricingRule;
 use Carbon\Carbon;
 
 class BookingRules
@@ -27,6 +31,7 @@ class BookingRules
             ->where(fn ($q) => $q->whereNull('starts_at')->orWhere('starts_at', '<=', $time))
             ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>', $time))
             ->orderByDesc('day_of_week')->orderByDesc('starts_at')->first();
+
         return round((float) ($rule?->price ?? $court->base_price) * ($start->diffInMinutes($end) / 60), 2);
     }
 }

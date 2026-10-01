@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\Membership;
+use App\Models\MembershipPlan;
 use App\Models\Payment;
 use Illuminate\Support\Facades\Http;
 
@@ -21,8 +23,15 @@ class PayMongoCheckout
         $return = config('services.paymongo.return_url');
         abort_unless(filter_var($return, FILTER_VALIDATE_URL) && parse_url($return, PHP_URL_SCHEME) === 'https', 503, 'Payment return URL must be HTTPS.');
 
+        $name = 'Court reservation '.$payment->reference;
+        if ($payment->membership_id) {
+            $membership = Membership::findOrFail($payment->membership_id);
+            $plan = MembershipPlan::findOrFail($membership->membership_plan_id);
+            $name = 'Membership '.$plan->name;
+        }
+
         return $this->client()->post('https://api.paymongo.com/v1/checkout_sessions', ['data' => ['attributes' => [
-            'line_items' => [['name' => 'Court reservation '.$payment->reference, 'quantity' => 1,
+            'line_items' => [['name' => $name, 'quantity' => 1,
                 'amount' => (int) round((float) $payment->amount * 100), 'currency' => $payment->currency]],
             'payment_method_types' => [$payment->method === 'maya' ? 'paymaya' : $payment->method],
             'reference_number' => $payment->reference, 'send_email_receipt' => true,
@@ -43,8 +52,8 @@ class PayMongoCheckout
         abort_unless(($session['id'] ?? null) === $payment->provider_reference && data_get($session, 'attributes.reference_number') === $payment->reference, 422, 'Checkout identity mismatch.');
         $settler = app(SettleCheckout::class);
         $payment = $settler->apply($session);
-        $booking = Booking::findOrFail($payment->booking_id);
-        if (! in_array($payment->status, ['paid', 'paid_review', 'expired'], true)
+        $booking = $payment->booking_id ? Booking::findOrFail($payment->booking_id) : null;
+        if ($booking && ! in_array($payment->status, ['paid', 'paid_review', 'expired'], true)
             && ($booking->status !== 'reserved' || ! $booking->expires_at?->isFuture() || ! $booking->starts_at->isFuture())) {
             $this->client()->post('https://api.paymongo.com/v1/checkout_sessions/'.$payment->provider_reference.'/expire')->throw();
             $payment = $settler->apply($this->retrieve($payment->provider_reference));

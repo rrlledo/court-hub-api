@@ -10,7 +10,10 @@ class Facility extends Model
 {
     protected $fillable = ['tenant_id', 'organization_id', 'name', 'timezone', 'address', 'registration_open'];
 
-    protected function casts(): array { return ['registration_open' => 'boolean']; }
+    protected function casts(): array
+    {
+        return ['registration_open' => 'boolean'];
+    }
 
     public function tenant(): BelongsTo
     {

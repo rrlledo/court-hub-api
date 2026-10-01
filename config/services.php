@@ -44,6 +44,12 @@ return [
     'xendit' => [
         'secret_key' => env('XENDIT_SECRET_KEY'),
         'webhook_secret' => env('XENDIT_WEBHOOK_SECRET'),
+        'mock_enabled' => env('XENDIT_MOCK_ENABLED', false),
+    ],
+
+    'firebase' => [
+        'project_id' => env('FIREBASE_PROJECT_ID'),
+        'service_account_path' => env('FIREBASE_SERVICE_ACCOUNT_PATH'),
     ],
 
 ];

@@ -3,17 +3,17 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\BookingResource;
 use App\Models\Booking;
 use App\Models\Court;
 use App\Models\RecurringReservation;
 use App\Models\Refund;
 use App\Models\Waitlist;
+use App\Services\BookingRules;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use App\Services\BookingRules;
-use App\Http\Resources\BookingResource;
+use Illuminate\Support\Str;
 
 class BookingLifecycleController extends Controller
 {
@@ -38,34 +38,34 @@ class BookingLifecycleController extends Controller
     public function reschedule(Request $r, int $booking)
     {
         return DB::transaction(function () use ($r, $booking) {
-        $b = $this->booking($r, $booking);
-        // Match creation's court lock before reloading the booking for mutation.
-        $court = Court::where('tenant_id', $r->user()->tenant_id)->lockForUpdate()->findOrFail($b->court_id);
-        $b = Booking::whereKey($b->id)->lockForUpdate()->firstOrFail();
-        abort_unless($b->user_id === $r->user()->id || $r->user()->hasAnyRole(['court-owner', 'facility-manager', 'front-desk']), 403, 'You cannot reschedule this booking.');
-        abort_unless(in_array($b->status, ['reserved', 'confirmed'], true) && $b->starts_at->isFuture(), 422, 'Only upcoming active bookings can be rescheduled.');
-        abort_if($b->status === 'reserved' && $b->expires_at?->isPast(), 422, 'This reservation has expired.');
-        $d = $r->validate(['starts_at' => ['required', 'date', 'after:now'], 'ends_at' => ['required', 'date', 'after:starts_at']]);
-        abort_if(in_array($b->status, ['cancelled', 'expired'], true), 422, 'This booking cannot be rescheduled.');
-        $startsAt = Carbon::parse($d['starts_at'])->utc();
-        $endsAt = Carbon::parse($d['ends_at'])->utc();
-        $rules = app(BookingRules::class);
-        $rules->validate($court, $startsAt, $endsAt);
-        abort_if(abs($rules->amount($court, $startsAt, $endsAt) - (float) $b->amount) > 0.009, 422, 'This time changes the booking price. Please contact the facility to arrange the price difference.');
-        $hasConflict = Booking::query()
-            ->where('court_id', $b->court_id)
-            ->whereKeyNot($b->id)
-            ->whereIn('status', ['reserved', 'confirmed'])
-            ->where(function ($query) {
-                $query->where('status', 'confirmed')->orWhere('expires_at', '>', now());
-            })
-            ->where('starts_at', '<', $endsAt)
-            ->where('ends_at', '>', $startsAt)
-            ->exists();
-        abort_if($hasConflict, 409, 'The selected court is no longer available for this time.');
-        $b->update(['starts_at' => $startsAt, 'ends_at' => $endsAt]);
+            $b = $this->booking($r, $booking);
+            // Match creation's court lock before reloading the booking for mutation.
+            $court = Court::where('tenant_id', $r->user()->tenant_id)->lockForUpdate()->findOrFail($b->court_id);
+            $b = Booking::whereKey($b->id)->lockForUpdate()->firstOrFail();
+            abort_unless($b->user_id === $r->user()->id || $r->user()->hasAnyRole(['court-owner', 'facility-manager', 'front-desk']), 403, 'You cannot reschedule this booking.');
+            abort_unless(in_array($b->status, ['reserved', 'confirmed'], true) && $b->starts_at->isFuture(), 422, 'Only upcoming active bookings can be rescheduled.');
+            abort_if($b->status === 'reserved' && $b->expires_at?->isPast(), 422, 'This reservation has expired.');
+            $d = $r->validate(['starts_at' => ['required', 'date', 'after:now'], 'ends_at' => ['required', 'date', 'after:starts_at']]);
+            abort_if(in_array($b->status, ['cancelled', 'expired'], true), 422, 'This booking cannot be rescheduled.');
+            $startsAt = Carbon::parse($d['starts_at'])->utc();
+            $endsAt = Carbon::parse($d['ends_at'])->utc();
+            $rules = app(BookingRules::class);
+            $rules->validate($court, $startsAt, $endsAt);
+            abort_if(abs($rules->amount($court, $startsAt, $endsAt) - (float) $b->amount) > 0.009, 422, 'This time changes the booking price. Please contact the facility to arrange the price difference.');
+            $hasConflict = Booking::query()
+                ->where('court_id', $b->court_id)
+                ->whereKeyNot($b->id)
+                ->whereIn('status', ['reserved', 'confirmed'])
+                ->where(function ($query) {
+                    $query->where('status', 'confirmed')->orWhere('expires_at', '>', now());
+                })
+                ->where('starts_at', '<', $endsAt)
+                ->where('ends_at', '>', $startsAt)
+                ->exists();
+            abort_if($hasConflict, 409, 'The selected court is no longer available for this time.');
+            $b->update(['starts_at' => $startsAt, 'ends_at' => $endsAt]);
 
-        return new BookingResource($b);
+            return new BookingResource($b);
         });
     }
 
@@ -88,7 +88,11 @@ class BookingLifecycleController extends Controller
     public function qr(Request $r, int $booking)
     {
         $b = $this->booking($r, $booking);
-        $b->update(['qr_code' => Str::upper(Str::random(16))]);
+        abort_unless($b->user_id === $r->user()->id || $r->user()->hasAnyRole(['court-owner', 'facility-manager', 'front-desk']), 403, 'You cannot access this booking QR code.');
+        abort_unless($b->status === 'confirmed', 422, 'Only confirmed bookings have a QR code.');
+        if (! $b->qr_code) {
+            $b->update(['qr_code' => Str::upper(Str::random(16))]);
+        }
 
         return response()->json(['data' => ['booking_id' => $b->id, 'qr_code' => $b->qr_code]]);
     }

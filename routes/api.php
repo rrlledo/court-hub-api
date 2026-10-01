@@ -1,33 +1,45 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AdvancedWorkflowController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BookingController;
 use App\Http\Controllers\Api\V1\BookingLifecycleController;
 use App\Http\Controllers\Api\V1\BranchController;
+use App\Http\Controllers\Api\V1\CheckoutController;
+use App\Http\Controllers\Api\V1\CoachWorkspaceController;
 use App\Http\Controllers\Api\V1\CourtController;
 use App\Http\Controllers\Api\V1\FacilityController;
+use App\Http\Controllers\Api\V1\FacilityOnboardingController;
 use App\Http\Controllers\Api\V1\FacilityOperationsController;
 use App\Http\Controllers\Api\V1\MembershipPaymentController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OperationsController;
 use App\Http\Controllers\Api\V1\OrganizationController;
+use App\Http\Controllers\Api\V1\OrganizerWorkspaceController;
+use App\Http\Controllers\Api\V1\PlayerMembershipController;
+use App\Http\Controllers\Api\V1\PlayerRegistrationController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\SportsOperationsController;
+use App\Http\Controllers\Api\V1\StaffCheckInController;
+use App\Http\Controllers\Api\V1\SuperAdminController;
 use App\Http\Controllers\Api\V1\UserManagementController;
+use App\Http\Middleware\EnsureTenantActive;
+use App\Http\Middleware\PlayerAccess;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('health', fn () => response()->json(['data' => ['status' => 'ok']]));
-    Route::get('registration/facilities', [\App\Http\Controllers\Api\V1\PlayerRegistrationController::class, 'facilities'])->middleware('throttle:30,1');
-    Route::post('auth/register-player', [\App\Http\Controllers\Api\V1\PlayerRegistrationController::class, 'register'])->middleware('throttle:5,1');
+    Route::get('registration/facilities', [PlayerRegistrationController::class, 'facilities'])->middleware('throttle:30,1');
+    Route::post('auth/register-player', [PlayerRegistrationController::class, 'register'])->middleware('throttle:5,1');
     Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
     Route::post('auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
-    Route::post('payments/webhooks/{provider}', [\App\Http\Controllers\Api\V1\CheckoutController::class, 'webhook'])->middleware('throttle:60,1');
+    Route::post('auth/social/{provider}', [AuthController::class, 'socialLogin'])->middleware('throttle:10,1');
+    Route::post('payments/webhooks/{provider}', [CheckoutController::class, 'webhook'])->middleware('throttle:60,1');
     Route::get('openapi.json', fn () => response()->file(base_path('docs/openapi.json'), ['Content-Type' => 'application/json']));
 
-    Route::middleware(['auth:sanctum', \App\Http\Middleware\PlayerAccess::class])->group(function (): void {
+    Route::middleware(['auth:sanctum', EnsureTenantActive::class, PlayerAccess::class])->group(function (): void {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('auth/me', [AuthController::class, 'me']);
         Route::post('auth/change-password', [AuthController::class, 'changePassword']);
@@ -46,6 +58,19 @@ Route::prefix('v1')->group(function (): void {
         Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);
         Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead']);
         Route::put('notification-preferences', [NotificationController::class, 'preferences']);
+        Route::post('push/devices', [NotificationController::class, 'registerDevice']);
+        Route::delete('push/devices', [NotificationController::class, 'unregisterDevice']);
+
+        Route::prefix('super-admin')->middleware('role:super-admin')->group(function (): void {
+            Route::get('overview', [SuperAdminController::class, 'overview']);
+            Route::get('tenants', [SuperAdminController::class, 'tenants']);
+            Route::get('tenants/{tenant}', [SuperAdminController::class, 'show']);
+            Route::patch('tenants/{tenant}', [SuperAdminController::class, 'update']);
+            Route::post('tenants/{tenant}/users/{user}/revoke-sessions', [SuperAdminController::class, 'revokeUserSessions']);
+            Route::get('tenants/{tenant}/subscription-invoices', [SuperAdminController::class, 'invoices']);
+            Route::post('tenants/{tenant}/subscription-invoices', [SuperAdminController::class, 'createInvoice']);
+            Route::post('tenants/{tenant}/subscription-invoices/{invoice}/settle', [SuperAdminController::class, 'settleInvoice']);
+        });
 
         Route::get('users', [UserManagementController::class, 'index'])->middleware('role:court-owner|facility-manager');
         Route::post('users', [UserManagementController::class, 'store'])->middleware('role:court-owner|facility-manager');
@@ -87,7 +112,7 @@ Route::prefix('v1')->group(function (): void {
 
         // Read-only tenant discovery for customers; management routes remain restricted.
         Route::get('booking-facilities', [FacilityController::class, 'index']);
-        Route::patch('facilities/{facility}/registration', [\App\Http\Controllers\Api\V1\FacilityOnboardingController::class, 'update'])->middleware('role:court-owner|facility-manager');
+        Route::patch('facilities/{facility}/registration', [FacilityOnboardingController::class, 'update'])->middleware('role:court-owner|facility-manager');
         Route::get('courts/{court}/availability', [BookingController::class, 'availability']);
         Route::get('bookings', [BookingController::class, 'index']);
         Route::get('bookings/history', [BookingLifecycleController::class, 'history']);
@@ -119,6 +144,15 @@ Route::prefix('v1')->group(function (): void {
         Route::post('memberships/{membership}/sessions/use', [MembershipPaymentController::class, 'useSession'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::get('memberships/{membership}/session-usage', [MembershipPaymentController::class, 'sessionUsage']);
 
+        Route::prefix('player')->middleware('role:player')->group(function (): void {
+            Route::get('membership-plans', [PlayerMembershipController::class, 'plans']);
+            Route::get('memberships', [PlayerMembershipController::class, 'index']);
+            Route::post('memberships', [PlayerMembershipController::class, 'purchase']);
+            Route::get('memberships/{membership}', [PlayerMembershipController::class, 'show']);
+            Route::post('memberships/{membership}/renew', [PlayerMembershipController::class, 'renew']);
+            Route::get('memberships/{membership}/payment-status', [PlayerMembershipController::class, 'paymentStatus']);
+        });
+
         Route::get('coaches', [OperationsController::class, 'coaches']);
         Route::post('coaches', [OperationsController::class, 'createCoach'])->middleware('role:court-owner|facility-manager');
         Route::patch('coaches/{coach}', [SportsOperationsController::class, 'updateCoach'])->middleware('role:court-owner|facility-manager');
@@ -130,10 +164,21 @@ Route::prefix('v1')->group(function (): void {
         Route::post('coaching-sessions', [SportsOperationsController::class, 'createCoachingSession']);
         Route::post('coaching-sessions/{session}/complete', [SportsOperationsController::class, 'completeCoachingSession'])->middleware('role:court-owner|facility-manager|front-desk|coach');
         Route::post('coaching-sessions/{session}/cancel', [SportsOperationsController::class, 'cancelCoachingSession']);
+        Route::prefix('coach')->middleware('role:coach')->group(function (): void {
+            Route::get('workspace', [CoachWorkspaceController::class, 'dashboard']);
+            Route::put('availability', [CoachWorkspaceController::class, 'replaceAvailability']);
+            Route::post('sessions/{session}/complete', [CoachWorkspaceController::class, 'complete']);
+            Route::post('sessions/{session}/cancel', [CoachWorkspaceController::class, 'cancel']);
+            Route::get('students', [AdvancedWorkflowController::class, 'myCoachRoster']);
+        });
+        Route::get('coaches/{coach}/students', [AdvancedWorkflowController::class, 'coachStudents'])->middleware('role:court-owner|facility-manager|coach');
+        Route::post('coaches/{coach}/students', [AdvancedWorkflowController::class, 'addCoachStudent'])->middleware('role:court-owner|facility-manager');
+        Route::delete('coaches/{coach}/students/{student}', [AdvancedWorkflowController::class, 'removeCoachStudent'])->middleware('role:court-owner|facility-manager');
         Route::get('inventory-items', [OperationsController::class, 'inventory']);
         Route::post('inventory-items', [OperationsController::class, 'createInventory'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::patch('inventory-items/{inventoryItem}', [SportsOperationsController::class, 'updateInventory'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::get('rentals', [OperationsController::class, 'rentals']);
+        Route::get('rental-users', [OperationsController::class, 'rentalUsers'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::post('rentals', [OperationsController::class, 'createRental'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::get('rentals/overdue', [SportsOperationsController::class, 'overdueRentals'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::get('rentals/{rental}', [SportsOperationsController::class, 'showRental']);
@@ -151,15 +196,37 @@ Route::prefix('v1')->group(function (): void {
         Route::get('tournaments/{tournament}/matches', [SportsOperationsController::class, 'matches']);
         Route::post('tournaments/{tournament}/matches', [SportsOperationsController::class, 'createMatch'])->middleware('role:court-owner|facility-manager|event-organizer');
         Route::patch('tournament-matches/{match}', [SportsOperationsController::class, 'updateMatch'])->middleware('role:court-owner|facility-manager|event-organizer');
+        Route::get('tournaments/{tournament}/teams', [OrganizerWorkspaceController::class, 'teams'])->middleware('role:court-owner|facility-manager|event-organizer');
+        Route::post('tournaments/{tournament}/teams', [OrganizerWorkspaceController::class, 'createTeam'])->middleware('role:court-owner|facility-manager|event-organizer');
+        Route::post('tournaments/{tournament}/teams/{team}/members', [OrganizerWorkspaceController::class, 'addTeamMember'])->middleware('role:court-owner|facility-manager|event-organizer');
+        Route::post('tournaments/{tournament}/registrations/{registration}/check-in', [OrganizerWorkspaceController::class, 'checkIn'])->middleware('role:court-owner|facility-manager|event-organizer|front-desk');
+        Route::prefix('organizer')->middleware('role:event-organizer')->group(function (): void {
+            Route::get('tournaments', [OrganizerWorkspaceController::class, 'index']);
+            Route::post('tournaments', [OrganizerWorkspaceController::class, 'store']);
+            Route::get('tournaments/{tournament}', [OrganizerWorkspaceController::class, 'show']);
+            Route::patch('tournaments/{tournament}', [OrganizerWorkspaceController::class, 'update']);
+            Route::get('players', [OrganizerWorkspaceController::class, 'players']);
+            Route::post('tournaments/{tournament}/registrations', [OrganizerWorkspaceController::class, 'register']);
+            Route::post('tournaments/{tournament}/registrations/{registration}/cancel', [OrganizerWorkspaceController::class, 'cancelRegistration']);
+            Route::post('tournaments/{tournament}/matches', [OrganizerWorkspaceController::class, 'createMatch']);
+            Route::patch('matches/{match}', [OrganizerWorkspaceController::class, 'updateMatch']);
+            Route::get('tournaments/{tournament}/teams', [OrganizerWorkspaceController::class, 'teams']);
+            Route::post('tournaments/{tournament}/teams', [OrganizerWorkspaceController::class, 'createTeam']);
+            Route::post('tournaments/{tournament}/teams/{team}/members', [OrganizerWorkspaceController::class, 'addTeamMember']);
+            Route::post('tournaments/{tournament}/registrations/{registration}/check-in', [OrganizerWorkspaceController::class, 'checkIn']);
+        });
         Route::get('payments', [OperationsController::class, 'payments'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::post('payments', [OperationsController::class, 'recordPayment'])->middleware('role:court-owner|facility-manager|front-desk');
-        Route::post('payments/intents', [\App\Http\Controllers\Api\V1\CheckoutController::class, 'create'])->middleware('throttle:10,1');
-        Route::get('bookings/{booking}/payment-status', [\App\Http\Controllers\Api\V1\CheckoutController::class, 'status'])->middleware('throttle:30,1');
+        Route::post('payments/intents', [CheckoutController::class, 'create'])->middleware('throttle:10,1');
+        Route::post('payments/mock/xendit/{payment}/complete', [CheckoutController::class, 'completeMockXendit'])->middleware('throttle:10,1');
+        Route::get('bookings/{booking}/payment-status', [CheckoutController::class, 'status'])->middleware('throttle:30,1');
         Route::get('payments/providers', [MembershipPaymentController::class, 'providers']);
         Route::post('payments/{payment}/refunds', [MembershipPaymentController::class, 'refund'])->middleware('role:court-owner|facility-manager');
         Route::get('payments/{payment}/invoice', [MembershipPaymentController::class, 'invoice']);
         Route::get('payments/reconciliation/summary', [MembershipPaymentController::class, 'reconciliation'])->middleware('role:court-owner|facility-manager');
+        Route::get('payments/settlements', [AdvancedWorkflowController::class, 'settlements'])->middleware('role:court-owner|facility-manager');
         Route::post('check-ins/qr', [OperationsController::class, 'qrCheckIn'])->middleware('role:court-owner|facility-manager|front-desk');
+        Route::post('check-ins/scan', [StaffCheckInController::class, 'scan'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::post('check-ins', [OperationsController::class, 'checkIn'])->middleware('role:court-owner|facility-manager|front-desk');
         Route::get('reports/dashboard', [OperationsController::class, 'dashboard'])->middleware('role:court-owner|facility-manager');
         Route::get('reports/revenue', [ReportController::class, 'revenue'])->middleware('role:court-owner|facility-manager');

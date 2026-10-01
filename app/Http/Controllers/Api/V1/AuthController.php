@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Facility;
+use App\Models\SocialAccount;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\TotpService;
@@ -48,11 +50,51 @@ class AuthController extends Controller
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             return response()->json(['message' => 'The supplied credentials are incorrect.'], 422);
         }
+        if (! $user->hasRole('super-admin') && $user->tenant && ! $user->tenant->is_active) {
+            return response()->json(['message' => 'This tenant has been suspended.'], 403);
+        }
         if ($user->two_factor_confirmed_at && ! app(TotpService::class)->verify($user->two_factor_secret, $data['two_factor_code'] ?? '')) {
             return response()->json(['message' => 'A valid two-factor authentication code is required.'], 422);
         }
 
         return response()->json(['data' => ['user' => $user->only('id', 'tenant_id', 'name', 'email'), 'token' => $user->createToken($data['device_name'] ?? 'web')->plainTextToken]]);
+    }
+
+    public function socialLogin(Request $request, string $provider): JsonResponse
+    {
+        abort_if(! in_array($provider, ['google', 'apple', 'facebook'], true), 422, 'Unsupported social sign-in provider.');
+        $data = $request->validate([
+            'mock_subject' => ['required', 'string', 'max:190'],
+            'email' => ['required', 'email', 'max:255'],
+            'name' => ['nullable', 'string', 'max:120'],
+            'facility_id' => ['nullable', 'integer'],
+            'device_name' => ['nullable', 'string', 'max:100'],
+            'two_factor_code' => ['nullable', 'string'],
+        ]);
+        $account = SocialAccount::where('provider', $provider)->where('provider_user_id', $data['mock_subject'])->first();
+        if ($account) {
+            $user = User::findOrFail($account->user_id);
+        } else {
+            abort_unless(isset($data['facility_id']), 422, 'Select a facility to create a player account.');
+            $facility = Facility::where('registration_open', true)->findOrFail($data['facility_id']);
+            $user = User::where('email', $data['email'])->first();
+            if ($user) {
+                abort_unless($user->tenant_id === $facility->tenant_id, 409, 'This email belongs to another tenant.');
+            } else {
+                Role::findOrCreate('player', 'web');
+                $user = User::create(['tenant_id' => $facility->tenant_id, 'home_facility_id' => $facility->id, 'name' => $data['name'] ?? Str::before($data['email'], '@'), 'email' => $data['email'], 'password' => Hash::make(Str::random(48)), 'email_verified_at' => now()]);
+                $user->assignRole('player');
+            }
+            SocialAccount::create(['user_id' => $user->id, 'provider' => $provider, 'provider_user_id' => $data['mock_subject']]);
+        }
+        if (! $user->hasRole('super-admin') && $user->tenant && ! $user->tenant->is_active) {
+            return response()->json(['message' => 'This tenant has been suspended.'], 403);
+        }
+        if ($user->two_factor_confirmed_at && ! app(TotpService::class)->verify($user->two_factor_secret, $data['two_factor_code'] ?? '')) {
+            return response()->json(['message' => 'A valid two-factor authentication code is required.'], 422);
+        }
+
+        return response()->json(['data' => ['user' => $user->only('id', 'tenant_id', 'name', 'email'), 'token' => $user->createToken($data['device_name'] ?? 'social-mock')->plainTextToken, 'mock' => true]], $account ? 200 : 201);
     }
 
     public function logout(Request $request): JsonResponse

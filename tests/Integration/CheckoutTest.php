@@ -18,6 +18,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class CheckoutTest extends TestCase
@@ -159,5 +160,31 @@ class CheckoutTest extends TestCase
         $this->assertSame('pending', $payment->status);
         $this->assertTrue($payment->provider_payload['attempt_failed']);
         $this->assertSame('reserved', $this->booking->fresh()->status);
+    }
+
+    public function test_xendit_mock_checkout_settles_and_refunds_without_a_provider_subscription(): void
+    {
+        config(['services.xendit.mock_enabled' => true]);
+
+        $this->postJson('/api/v1/payments/intents', [
+            'booking_id' => $this->booking->id,
+            'provider' => 'xendit',
+            'method' => 'gcash',
+        ])->assertCreated()
+            ->assertJsonPath('data.checkout_url', fn (string $url) => str_starts_with($url, 'https://checkout.xendit.test/'));
+
+        $payment = Payment::firstOrFail();
+        $this->postJson('/api/v1/payments/mock/xendit/'.$payment->id.'/complete')
+            ->assertOk()
+            ->assertJsonPath('data.payment.status', 'paid');
+        $this->assertSame('confirmed', $this->booking->fresh()->status);
+
+        Role::findOrCreate('facility-manager', 'web');
+        $manager = User::factory()->create(['tenant_id' => $this->booking->tenant_id]);
+        $manager->assignRole('facility-manager');
+        Sanctum::actingAs($manager);
+        $this->postJson('/api/v1/payments/'.$payment->id.'/refunds', ['amount' => 125])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'completed');
     }
 }

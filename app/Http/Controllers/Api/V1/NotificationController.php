@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Jobs\CreateUserNotification;
 use App\Models\NotificationPreference;
+use App\Models\PushDevice;
 use App\Models\UserNotification;
 use Illuminate\Http\Request;
 
@@ -36,6 +37,40 @@ class NotificationController extends Controller
         $preference = NotificationPreference::updateOrCreate(['user_id' => $request->user()->id], $data);
 
         return response()->json(['data' => $preference]);
+    }
+
+    public function registerDevice(Request $request)
+    {
+        $data = $request->validate([
+            'token' => ['required', 'string', 'max:4096'],
+            'platform' => ['required', 'in:android,ios'],
+            'device_name' => ['nullable', 'string', 'max:120'],
+        ]);
+        $user = $request->user();
+        $device = PushDevice::updateOrCreate(
+            ['token_hash' => hash('sha256', $data['token'])],
+            [
+                'tenant_id' => $user->tenant_id,
+                'user_id' => $user->id,
+                'token' => $data['token'],
+                'platform' => $data['platform'],
+                'device_name' => $data['device_name'] ?? null,
+                'last_seen_at' => now(),
+            ],
+        );
+        NotificationPreference::firstOrCreate(['user_id' => $user->id])->update(['push_enabled' => true]);
+
+        return response()->json(['data' => ['id' => $device->id, 'platform' => $device->platform]], $device->wasRecentlyCreated ? 201 : 200);
+    }
+
+    public function unregisterDevice(Request $request)
+    {
+        $data = $request->validate(['token' => ['required', 'string', 'max:4096']]);
+        PushDevice::where('user_id', $request->user()->id)
+            ->where('token_hash', hash('sha256', $data['token']))
+            ->delete();
+
+        return response()->noContent();
     }
 
     public function dispatchTest(Request $request)

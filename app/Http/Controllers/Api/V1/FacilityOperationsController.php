@@ -59,7 +59,7 @@ class FacilityOperationsController extends Controller
             } OperatingHour::updateOrCreate(['branch_id' => $branch, 'day_of_week' => $hour['day_of_week']], $hour + ['tenant_id' => $request->user()->tenant_id]);
         }
 
-return $this->operatingHours($request, $branch);
+        return $this->operatingHours($request, $branch);
     }
 
     public function holidays(Request $request, int $branch): JsonResponse
