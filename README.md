@@ -32,6 +32,21 @@ php artisan serve
 
 Check `GET /api/v1/health`, then register a tenant owner with `POST /api/v1/auth/register`.
 
+## API base URLs
+
+| Target | Base URL |
+| --- | --- |
+| Local browser, Postman, and API clients | `http://127.0.0.1:8000/api/v1` |
+| Android emulator | `http://10.0.2.2:8000/api/v1` |
+| Staging | `https://api.staging.example.com/api/v1` (replace with the deployed hostname) |
+| Production | `https://api.example.com/api/v1` (replace with the deployed hostname) |
+
+## Local, staging, and production environments
+
+Use the tracked `.env.local.example`, `.env.staging.example`, and `.env.production.example` files as safe templates. Laravel reads only `.env`, so copy the template for the selected target to `.env`, replace placeholder values, run `php artisan key:generate`, then run `php artisan optimize:clear` and restart queue workers. Real environment files are ignored by Git. The complete selection, deployment, queue, scheduler, secret-management, and payment-mock procedure is in [`../docs/ENVIRONMENTS.md`](../docs/ENVIRONMENTS.md).
+
+For live-account setup, current PayMongo/Xendit/Firebase/transactional-email pricing, infrastructure requirements, deployment steps, and known production limitations, read [`../docs/PRODUCTION_LAUNCH_REQUIREMENTS.md`](../docs/PRODUCTION_LAUNCH_REQUIREMENTS.md) before releasing the API.
+
 ## Demo data for every workflow
 
 For a local database only, create the idempotent Court Hub demo tenant, all seven role accounts, facility hierarchy, bookings, check-ins, memberships, mock payments/refunds, rentals, coaching, tournament registrations/matches, notifications, and reporting records:
