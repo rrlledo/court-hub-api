@@ -47,6 +47,10 @@ Use the tracked `.env.local.example`, `.env.staging.example`, and `.env.producti
 
 For live-account setup, current PayMongo/Xendit/Firebase/transactional-email pricing, infrastructure requirements, deployment steps, and known production limitations, read [`../docs/PRODUCTION_LAUNCH_REQUIREMENTS.md`](../docs/PRODUCTION_LAUNCH_REQUIREMENTS.md) before releasing the API.
 
+## Role-based user guides
+
+End-user guides for all seven Court Hub roles, including their web/mobile workflows and API-enforced access boundaries, are available in [`../docs/user-guides/README.md`](../docs/user-guides/README.md).
+
 ## Demo data for every workflow
 
 For a local database only, create the idempotent Court Hub demo tenant, all seven role accounts, facility hierarchy, bookings, check-ins, memberships, mock payments/refunds, rentals, coaching, tournament registrations/matches, notifications, and reporting records:
